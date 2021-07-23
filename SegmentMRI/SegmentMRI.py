@@ -5,6 +5,7 @@ import pydicom as dicom
 from PIL import ImageTk, Image, ImageEnhance, ImageDraw
 import numpy as np
 import matplotlib as mpl
+import pandas as pd
 
 import os
 
@@ -211,6 +212,18 @@ def save_contour():
 
 def export():
     global points
+
+    print(points)
+
+    points_df = pd.DataFrame(columns=['image #', 'contour #', 'point #', 'coordinates'])
+    for im in range (0, len(points)):
+        for area in range(0, len(points[im])-1):
+            for point in range (0, len(points[im][area])):
+                points_df.loc[-1] = ([im+1, area+1, point, points[im][area][point]])
+                points_df.index = points_df.index + 1
+
+    print(points_df)
+
     for i in range (0, len(points)):
         for j in range (0, len(points[i])-1):
             cont_a = points[i][j]
@@ -221,7 +234,8 @@ def export():
                     if isoverlap(cont_a, cont_b):
                         overlapped.append(cont_a)
                         overlapped.append(cont_b)
-            print(overlapped)
+                    print(overlapped)
+                    print(vol_from_areas(overlapped, 2))
 
 #other functions
 def true_coordinates(x, y):
@@ -239,7 +253,6 @@ def connect_points(points, im):
         prev = curr
 
 def isoverlap(a, b):
-
     a = undo_tuplearr(a)
     b = undo_tuplearr(b)
 
@@ -264,6 +277,20 @@ def undo_tuplearr(a):
         b[i][0] = a[i][0]
         b[i][1] = a[i][1]
     return b
+
+def vol_from_areas(conts, thickness):
+    vol = 0.0
+    for corners in conts:
+        n = len(corners)
+        area = 0.0
+        for i in range(n):
+            j = (i + 1) % n
+            area += corners[i][0] * corners[j][1]
+            area -= corners[j][0] * corners[i][1]
+        area = abs(area) / 2.0
+        vol += thickness * area
+
+    return vol
 
 #global variables
 images = []
