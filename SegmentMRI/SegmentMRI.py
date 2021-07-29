@@ -4,97 +4,185 @@ from tkinter import filedialog
 import pydicom as dicom
 from PIL import ImageTk, Image, ImageEnhance, ImageDraw
 import tifffile as tiff
+import zipfile
 
 import numpy as np
 import matplotlib as mpl
 import pandas as pd
 
 import os
+import zipfile
+from io import BytesIO
+
+
+def explore(file, side, win=None, zip=None):
+    if win:
+        win.destroy()
+
+    if zipfile.is_zipfile(file): #open zip givenfile path
+        win = Toplevel(root)
+
+        zip = zipfile.ZipFile(file)
+        filelist = zip.namelist()
+
+        for i in range(0, len(filelist)):
+            f = filelist[i]
+            if f.split('/')[-1] == '': #directories
+                btn = Button(win, text=f, 
+                             command=lambda win=win, zip=zip, name=f, side=side : explore(name, side, win, zip))
+                btn.grid(row=i, column=0)
+
+    elif zip and file.split('.')[-1] != 'zip': #open directory from zip
+        prev_path = file.split('/')
+        filelist = zip.namelist()
+
+        win = Toplevel(root)
+        for i in range(0, len(filelist)):
+            f = filelist[i]
+            new_path = f.split('/')
+
+            if prev_path[len(prev_path)-2] == new_path[len(new_path)-2] and file != f:
+                btn = Button(win, text=f, 
+                             command=lambda win=win, zip=zip, name=f, side=side: explore(name, side, win, zip))
+                btn.grid(row=i, column=0)
+
+    elif zip: #open zip from directory in zipfile object
+        newzip_data = BytesIO(zip.read(file))
+        zip = zipfile.ZipFile(newzip_data)
+        filelist = zip.namelist()
+
+        win = Toplevel(root)
+        for i in range(1, len(filelist)):
+            f = filelist[i]
+            btn = Button(win, text=f, 
+                             command=lambda win=win, zip=zip, name=f, side=side: explore(name, side, win, zip))
+            btn.grid(row=i, column=0)
+
+    #if all in window are dcm images, option to select folder
+    if win: 
+        is_dcm = True
+        for w in win.winfo_children():
+            if w.cget('text').split('.')[-1] != 'dcm':
+                is_dcm = False
+                break
+
+        if is_dcm:
+            #select button header
+            select_btn = Button(win, text='Select', background='blue',
+                                command=lambda win=win, zip=zip, name=file, side=side: select(name, side, win, zip))
+            select_btn.grid(row=win.grid_size()[1], column=0)
+
+
+def select(file, side, win, zip):
+    global select_pressed, images, images_right
+
+    filelist = zip.namelist()
+
+    for i in range (1, len(filelist)):
+        dcm = zip.read(filelist[i])
+        dcm = BytesIO(dcm)
+
+        ds = dicom.dcmread(dcm).pixel_array
+        pil_im = Image.fromarray(ds).convert('L')
+
+        if side == 'left':
+            images.append(pil_im)
+        elif side == 'right':
+            images_right.append(pil_im)
+
+    #array with pil images
+
+    select_pressed.set(True)
+    win.destroy()
 
 #event handler functions
 def select_image(name):
-    global images, images_right, points #image panel
+    global images, images_right, points, select_pressed #image panel
 
     #open file choose
-    directory = filedialog.askdirectory()
+    zip_file = filedialog.askopenfilename()
+    explore(zip_file, name)
 
-    if len(directory) > 0:
-        filenames = os.listdir(directory)
+    root.wait_variable(select_pressed)
+    select_pressed = BooleanVar()
 
-        for file in filenames:
-            path = directory + '/' + file
+    #if len(directory) > 0:
+    #filenames = os.listdir(directory)
 
-            ds = dicom.dcmread(path).pixel_array
-            pil_im = Image.fromarray(ds).convert('L')
+    #for file in filenames:
+    #    path = directory + '/' + file
 
-            if name == 'left':
-                images.append(pil_im)
-            elif name == 'right':
-                images_right.append(pil_im)
+    #    ds = dicom.dcmread(path).pixel_array
+    #    pil_im = Image.fromarray(ds).convert('L')
 
-        #create none list
-        if len(points) == 0:
-            l = len(images)
-            if len(images_right) > l:
-                l = len(images_right)
+    #    if name == 'left':
+    #        images.append(pil_im)
+    #    elif name == 'right':
+    #        images_right.append(pil_im)
 
-            for i in range (0, l):
-                points.append([None])
+    #create none list
+    if len(points) == 0:
+        l = len(images)
+        if len(images_right) > l:
+            l = len(images_right)
 
-        #point info frame shown after first selected
-        f2.grid(row=0, column=0, rowspan=2, sticky=N+S)
+        for i in range (0, l):
+            points.append([None])
 
-        if name == 'left':
-            change_image(1, 'left') #change left image
+    #point info frame shown after first selected
+    f2.grid(row=0, column=0, rowspan=2, sticky=N+S)
 
-            btn.grid_forget() #cannot choose new files for first canvas
+    if name == 'left':
+        change_image(1, 'left') #change left image
 
-            f1 = Frame(root, width=400, height=30)
+        btn.grid_forget() #cannot choose new files for first canvas
 
-            #brightness scale
-            brightness_text = Label(f1, text='Brightness: ')
-            brightness_text.grid(row=0, column=0, sticky=W, pady=0)
+        f1 = Frame(root, width=400, height=30)
 
-            brightness_scale = Scale(f1, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
-                                     resolution = 0.01, command=change_brightness)
-            brightness_scale.grid(row=1, column=0, sticky=W)
-            brightness_scale.set(1.0)
+        #brightness scale
+        brightness_text = Label(f1, text='Brightness: ')
+        brightness_text.grid(row=0, column=0, sticky=W, pady=0)
 
-            #contrast scale
-            contrast_text = Label(f1, text='Contrast: ')
-            contrast_text.grid(row=3, column=0, sticky=W, pady=0)
+        brightness_scale = Scale(f1, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
+                                    resolution = 0.01, command=change_brightness)
+        brightness_scale.grid(row=1, column=0, sticky=W)
+        brightness_scale.set(1.0)
 
-            contrast_scale = Scale(f1, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
-                                   resolution=0.01, command=change_contrast)
-            contrast_scale.grid(row=4, column=0, stick=W)
-            contrast_scale.set(1.0)
+        #contrast scale
+        contrast_text = Label(f1, text='Contrast: ')
+        contrast_text.grid(row=3, column=0, sticky=W, pady=0)
 
-            f1.grid(row=2, column = 1, rowspan=2, sticky=N+S)
+        contrast_scale = Scale(f1, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
+                                resolution=0.01, command=change_contrast)
+        contrast_scale.grid(row=4, column=0, stick=W)
+        contrast_scale.set(1.0)
 
-        elif name == 'right':
-            btn_right.grid_forget()
+        f1.grid(row=2, column = 1, rowspan=2, sticky=N+S)
 
-            f3 = Frame(root, width=400, height=30)
+    elif name == 'right':
+        btn_right.grid_forget()
 
-            #brightness scale
-            brightness_text = Label(f3, text='Brightness: ')
-            brightness_text.grid(row=0, column=0, sticky=W, pady=0)
+        f3 = Frame(root, width=400, height=30)
 
-            brightness_scale_right = Scale(f3, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
-                                     resolution = 0.01, command=change_brightness_right)
-            brightness_scale_right.grid(row=1, column=0, sticky=W)
-            brightness_scale_right.set(1.0)
+        #brightness scale
+        brightness_text = Label(f3, text='Brightness: ')
+        brightness_text.grid(row=0, column=0, sticky=W, pady=0)
 
-            #contrast scale
-            contrast_text = Label(f3, text='Contrast: ')
-            contrast_text.grid(row=3, column=0, sticky=W, pady=0)
+        brightness_scale_right = Scale(f3, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
+                                    resolution = 0.01, command=change_brightness_right)
+        brightness_scale_right.grid(row=1, column=0, sticky=W)
+        brightness_scale_right.set(1.0)
 
-            contrast_scale_right = Scale(f3, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
-                                   resolution=0.01, command=change_contrast_right)
-            contrast_scale_right.grid(row=4, column=0, stick=W)
-            contrast_scale_right.set(1.0)
+        #contrast scale
+        contrast_text = Label(f3, text='Contrast: ')
+        contrast_text.grid(row=3, column=0, sticky=W, pady=0)
 
-            f3.grid(row=2, column = 2, rowspan=2, sticky=N+S)
+        contrast_scale_right = Scale(f3, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
+                                resolution=0.01, command=change_contrast_right)
+        contrast_scale_right.grid(row=4, column=0, stick=W)
+        contrast_scale_right.set(1.0)
+
+        f3.grid(row=2, column = 2, rowspan=2, sticky=N+S)
 
 def change_image(val, side):
     global im_index
@@ -417,6 +505,7 @@ imscale = 1.0 #image zoom factor
 points = []
 data = []
 
+
 #if run from .exe, diff fpath
 basepath = ''
 if getattr(sys, 'frozen', False):
@@ -429,6 +518,9 @@ root.title('Segment Images')
 root.columnconfigure(1, weight=1)
 root.columnconfigure(2, weight=1)
 root.rowconfigure(0, weight=1)
+
+#
+select_pressed = BooleanVar(root)
 
 canvas = Canvas(root, width=400, height=400, bg='white')
 canvas.grid(row=1, column=1, sticky = N+S+E+W, pady=5)
