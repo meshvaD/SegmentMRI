@@ -1,22 +1,25 @@
+print('...............IMPORTING...............')
 from tkinter import *
 from tkinter import filedialog
+
+print(' tkinter')
 
 import pydicom as dicom
 from skimage import exposure
 from PIL import ImageTk, Image, ImageEnhance, ImageDraw
 import tifffile as tiff
 import zipfile
+print(' pydicom \n scikit-image \n PIL \n tiffile \n zipfile')
 
 import numpy as np
 import matplotlib as mpl
 import pandas as pd
+print(' numpy \n matplotlib \n pandas')
 
 import os
-import zipfile
 from io import BytesIO
+print(' os \n io')
 
-import gc
-from guppy import hpy
 
 class SegmentMRI(Frame):
 
@@ -34,7 +37,9 @@ class SegmentMRI(Frame):
         self.alpha_right = 1.0
         self.beta_right = 1.0
 
+        self.upsample = 10 #no user input, default to 10
         self.pan = False
+        self.zoom = False
         self.imscale = 1.0 #image zoom factor
 
         self.points = []
@@ -42,11 +47,12 @@ class SegmentMRI(Frame):
 
         #initialize and bind components 
         parent.title('Segment Images')
+        self.parent.config(cursor='tcross')
 
         #weight > rest(0), resized when window size changed
         parent.columnconfigure(1, weight=1)
         parent.columnconfigure(2, weight=1)
-        parent.rowconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=1)
 
         self.select_pressed = BooleanVar(parent)
 
@@ -113,9 +119,14 @@ class SegmentMRI(Frame):
         save_btn = Button(self.f2, text='Save Contour', command=self.save_contour)
         save_btn.grid(row=2, column=0, pady=5, sticky=W)
 
+        #keyboard input binding
         parent.bind_all('<Control-z>', lambda x: self.undo_point())
-        undo_btn = Button(self.f2, text='Undo Point', command=self.undo_point)
-        undo_btn.grid(row=3, column=0, pady=5, sticky=W)
+        parent.bind_all('<KeyPress-space>', lambda x, a = True: self.allow_pan(a))
+        parent.bind_all('<KeyRelease-space>', lambda x, a = False: self.allow_pan(a))
+        parent.bind_all('<KeyPress-equal>', lambda x: self.allow_zoom())
+
+        #undo_btn = Button(self.f2, text='Undo Point', command=self.undo_point)
+        #undo_btn.grid(row=3, column=0, pady=5, sticky=W)
 
         #if run from .exe, diff fpath
         basepath = ''
@@ -123,17 +134,31 @@ class SegmentMRI(Frame):
             basepath = sys._MEIPASS + '\\'
 
         #zoom and pan controls
-        self.hand = ImageTk.PhotoImage(Image.open(basepath + 'hand.png').resize((20,20))) #shrink
-        pan_btn = Button(self.f2, image = self.hand, width=20, height=20, command=self.allow_pan)
-        pan_btn.grid(row=5, column=2, pady=5, sticky=W)
+        #self.hand = ImageTk.PhotoImage(Image.open(basepath + 'hand.png').resize((20,20))) #shrink
+        #pan_btn = Button(self.f2, image = self.hand, width=20, height=20, command=self.allow_pan)
+        #pan_btn.grid(row=5, column=2, pady=5, sticky=W)
+
+        self.zoom_invar = StringVar(self.f2, value='1.0')
+        self.zoom_input = Entry(self.f2, textvariable=self.zoom_invar, validate='focusout', 
+                                validatecommand= self.set_zoom)
+                                #validatecommand=lambda zoom=float(self.zoom_invar.get()):self.zoomer(zoom))
+        self.zoom_input.grid(row=4, column=1, sticky=E)
 
         self.zoom_in = ImageTk.PhotoImage(Image.open(basepath + 'zoom_in.png').resize((20,20)))
         zoomin_btn = Button(self.f2, image = self.zoom_in, width=20, height=20, command=lambda zoom=0.1:self.zoomer(zoom))
-        zoomin_btn.grid(row=4, column=2, pady=5, sticky=W)
+        zoomin_btn.grid(row=4, column=3, pady=5, sticky=W)
 
         self.zoom_out = ImageTk.PhotoImage(Image.open(basepath + 'zoom_out.png').resize((20,20)))
         zoomout_btn = Button(self.f2, image = self.zoom_out, width=20, height=20, command=lambda zoom=-0.1:self.zoomer(zoom))
-        zoomout_btn.grid(row=4, column=1, pady=5, sticky=E)
+        zoomout_btn.grid(row=4, column=2, pady=5, sticky=E)
+
+        #upscale image input
+        #upscale_lb = Label(self.f2, text='Upscale factor: ')
+        #upscale_lb.grid(row=5, column=0)
+        #self.upscale_invar = StringVar(self.f2, value='1')
+        #upscale_input = Entry(self.f2, textvariable=self.upscale_invar, validate='focusout',
+        #                      validatecommand= self.set_upsample)
+        #upscale_input.grid(row=5, column=1, sticky=E)
 
         #image number
         self.im_show = StringVar(self.f2)
@@ -147,11 +172,6 @@ class SegmentMRI(Frame):
         error_label = Label(self.f2, textvariable=self.error)
         error_label.grid(row=6, column=0, columnspan=2)
 
-        #delete all text labels that will not be changed
-        print('...............INIT...............')
-        #del l_lb, r_lb, id_text, basepath, im_label, zoomin_btn, zoomout_btn, pan_btn
-        #gc.collect()
-        #print(h.heap().referrers.byclodo)
 
     def explore(self, file, side, win=None, zip=None):
         if win:
@@ -162,6 +182,7 @@ class SegmentMRI(Frame):
 
             zip = zipfile.ZipFile(file)
             filelist = zip.namelist()
+            filelist = sorted(filelist)
 
             for i in range(0, len(filelist)):
                 f = filelist[i]
@@ -173,6 +194,7 @@ class SegmentMRI(Frame):
         elif zip and file.split('.')[-1] != 'zip': #open directory from zip
             prev_path = file.split('/')
             filelist = zip.namelist()
+            filelist = sorted(filelist)
 
             win = Toplevel(self.parent)
             for i in range(0, len(filelist)):
@@ -188,9 +210,11 @@ class SegmentMRI(Frame):
             newzip_data = BytesIO(zip.read(file))
             zip = zipfile.ZipFile(newzip_data)
             filelist = zip.namelist()
+            filelist.pop(0)
+            filelist = sorted(filelist)
 
             win = Toplevel(self.parent)
-            for i in range(1, len(filelist)):
+            for i in range(0, len(filelist)):
                 f = filelist[i]
                 btn = Button(win, text=f, 
                                  command=lambda win=win, zip=zip, name=f, side=side: self.explore(name, side, win, zip))
@@ -226,12 +250,10 @@ class SegmentMRI(Frame):
             ds = exposure.equalize_adapthist(ds) * 255
 
             pil_im = Image.fromarray(ds).convert('L')
-
-            #resize and upsample image
-            upsample = 5.0
-            self.imscale = 1.0 / upsample
-            pil_im = pil_im.resize((int(pil_im.size[0] * upsample), 
-                                    int(pil_im.size[1] * upsample)))
+            
+            self.imscale = 1.0 / self.upsample
+            pil_im = pil_im.resize((int(pil_im.size[0] * self.upsample), 
+                                    int(pil_im.size[1] * self.upsample)))
 
             if side == 'left':
                 self.images.append(pil_im)
@@ -242,6 +264,7 @@ class SegmentMRI(Frame):
 
         self.select_pressed.set(True)
         win.destroy()
+        del ds, pil_im
 
 
     #event handler functions
@@ -319,11 +342,6 @@ class SegmentMRI(Frame):
             f3.grid(row=2, column = 2, rowspan=2, sticky=N+S)
 
     def change_image(self, val, side): #update image displayed after each change
-
-        if val != None:
-            val = int(val)
-            self.im_index = val-1
-
         if side == 'left':
             im = self.images[self.im_index]
             cn = self.canvas
@@ -334,10 +352,8 @@ class SegmentMRI(Frame):
             cn = self.canvas_right
             a = self.alpha_right
             b = self.beta_right
-
-        cn.delete('all')
     
-        #image controls
+        ##image controls
         b_converter = ImageEnhance.Brightness(im)
         im = b_converter.enhance(a)
 
@@ -348,14 +364,22 @@ class SegmentMRI(Frame):
 
         im = self.draw_contours(self.points, self.im_index, im)
 
+        cn.delete('all')
         # +1 to avoid im with size 0 (zoom out too much)
-        im = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
+        if side == 'left':
+            self.im_left = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
                                            int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
+            cn.create_image(0, 0, image=self.im_left, anchor=N+W)
+        elif side == 'right':
+            self.im_right = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
+                                           int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
+            cn.create_image(0, 0, image=self.im_right, anchor=N+W)
 
-        panelA = Label(image = im)
-        panelA.image = im
+        #REPEATEDLY CREATE ACCUMULATES MEMORY
+        #panelA = Label(image = im)
+        #panelA.image = im
 
-        item = cn.create_image(0, 0, image=im, anchor=N+W)
+
 
 
     def draw_contours(self, points, index, im):
@@ -418,26 +442,55 @@ class SegmentMRI(Frame):
 
         self.update_all()
 
+    #resize and upsample image
+    #def set_upsample(self):
+    #    print('upsample')
+    #    self.upsample = int(self.upscale_invar.get())
+    #    for i in range (0, len(self.images)):
+
+    #        self.imscale = 1.0 / self.upsample
+    #        pil_im = self.images[i].resize((int(self.images[i].size[0] * self.upsample), 
+    #                                int(self.images[i].size[1] * self.upsample)))
+    #        self.images[i] = pil_im
+    #    for i in range (0, len(self.images_right)):
+    #        self.imscale = 1.0 / self.upsample
+    #        pil_im = self.images_right[i].resize((int(self.images_right[i].size[0] * self.upsample), 
+    #                                int(self.images_right[i].size[1] * self.upsample)))
+    #        self.images_right[i] = pil_im
+    #    self.update_all()
+
+    #    return True
+
     #zoom and pan
-    def zoomer(self, scale):  
+    def set_zoom(self):
+        scale = float(self.zoom_invar.get()) / self.upsample
+        if scale > 0 and scale-self.imscale > 0:
+            self.canvas.scale('all', 0, 0, scale-self.imscale, scale-self.imscale)
+
+            self.imscale = scale
+
+            self.update_all()
+        return True
+
+    def allow_zoom(self):
+        print('pressed')
+        self.zoom = True
+
+    def zoomer(self, scale): 
         self.imscale += scale
+        self.imscale = abs(self.imscale)
 
         self.canvas.scale('all', 0, 0, scale, scale)
 
         self.update_all()
  
-    def allow_pan(self):
-
-        if self.pan:
-            self.pan = False
-            self.parent.config(cursor='arrow')
-        else:
+    def allow_pan(self, a):
+        if a:
             self.pan = True
             self.parent.config(cursor='target')
-        
-        print(h.heap())
-        #print(h.heap()[0].referrers.byvia)
-
+        else:
+            self.pan = False
+            self.parent.config(cursor='tcross')
 
     def move_from(self, event):
         if self.pan:
@@ -446,6 +499,12 @@ class SegmentMRI(Frame):
 
             self.canvas.scan_mark(x, y)
             self.canvas_right.scan_mark(x, y)
+        elif self.zoom:
+            #if zooming in, add rectangle point
+            im = self.images[self.im_index]
+            draw = ImageDraw.Draw(im)
+            draw.ellipse((event.x, event.y, event.x+5, event.y+5), fill='red', outline='red')
+
         else:
             self.add_point(event)
 
@@ -459,7 +518,6 @@ class SegmentMRI(Frame):
 
     #point/ contour selection
     def add_point(self, event):
-
         if (len(self.images) > 0 or len(self.images_right) > 0):
             coords = self.true_coordinates(event.x, event.y)
 
@@ -479,11 +537,10 @@ class SegmentMRI(Frame):
             self.update_all()
 
     def undo_point(self):
-
         curr = len(self.points[self.im_index]) - 1
-        if len(self.points[self.im_index][curr][-1]) == 0:
+        if self.points[self.im_index] == None or self.points[self.im_index][curr] == None:
             self.error.set('no points selected to undo')
-        elif self.points[self.im_index][curr][-1] == None:
+        elif self.points[self.im_index][curr][-1] == None and len(self.data) > 0:
             del self.points[self.im_index][curr]
             del self.data[-1]
         elif len(self.points[self.im_index][curr]) == 1:
@@ -502,8 +559,12 @@ class SegmentMRI(Frame):
             self.error.set('no points selected')
         else:
             self.error.set('')
-            self.data.append([self.im_index, self.target_input.get(), self.points[self.im_index][-1], 
-                         self.area(self.points[self.im_index][-1])])
+            #divide by upsample val for points and area
+            points = np.divide(self.points[self.im_index][-1], self.upsample)
+            area = self.area(points)
+
+            self.data.append([self.im_index, self.target_input.get(), 
+                              points, area])
             self.points[self.im_index].append([None])
 
             self.update_all()
@@ -589,7 +650,7 @@ class SegmentMRI(Frame):
         n = len(cont)
         for i in range(n):
             j = (i + 1) % n
-            area += cont[i][0] * cont[j][1]
+            area += cont[i][0] * cont[j][1] #x1y2 - x2y1
             area -= cont[j][0] * cont[i][1]
         area = abs(area) / 2.0
 
@@ -612,8 +673,6 @@ class SegmentMRI(Frame):
 
         
 #start
-
-h = hpy()
 
 root = Tk()
 SegmentMRI(root)

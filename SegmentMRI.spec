@@ -26,6 +26,7 @@ a.datas.append(('zoom_in.png', 'C:\\Users\\HS student\\source\\repos\\SegmentMRI
 
 a.datas.append(('zoom_out.png', 'C:\\Users\\HS student\\source\\repos\\SegmentMRI\\SegmentMRI\\zoom_out.png', 'Data'))
 
+
 exe = EXE(pyz,
           a.scripts,
           a.binaries,
