@@ -369,17 +369,15 @@ class SegmentMRI(Frame):
         if side == 'left':
             self.im_left = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
                                            int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
-            cn.create_image(0, 0, image=self.im_left, anchor=N+W)
+            self.im_left_cn = cn.create_image(0, 0, image=self.im_left, anchor=N+W)
         elif side == 'right':
             self.im_right = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
                                            int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
-            cn.create_image(0, 0, image=self.im_right, anchor=N+W)
+            self.im_right_cn = cn.create_image(0, 0, image=self.im_right, anchor=N+W)
 
         #REPEATEDLY CREATE ACCUMULATES MEMORY
         #panelA = Label(image = im)
         #panelA.image = im
-
-
 
 
     def draw_contours(self, points, index, im):
@@ -483,6 +481,20 @@ class SegmentMRI(Frame):
         self.canvas.scale('all', 0, 0, scale, scale)
 
         self.update_all()
+
+    def zoom_rec(self, event, coords):
+        im = self.images[self.im_index]
+        im = im.convert('RGBA')
+        draw = ImageDraw.Draw(im)
+
+        coords2 = self.true_coordinates(event.x, event.y)
+        
+        draw.rectangle([coords, coords2], outline=(255, 0, 0), width=5)
+
+        self.im = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
+                                        int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
+      
+        self.canvas.create_image(0, 0, image=self.im, anchor=N+W)
  
     def allow_pan(self, a):
         if a:
@@ -499,12 +511,6 @@ class SegmentMRI(Frame):
 
             self.canvas.scan_mark(x, y)
             self.canvas_right.scan_mark(x, y)
-        elif self.zoom:
-            #if zooming in, add rectangle point
-            im = self.images[self.im_index]
-            draw = ImageDraw.Draw(im)
-            draw.ellipse((event.x, event.y, event.x+5, event.y+5), fill='red', outline='red')
-
         else:
             self.add_point(event)
 
@@ -518,9 +524,84 @@ class SegmentMRI(Frame):
 
     #point/ contour selection
     def add_point(self, event):
-        if (len(self.images) > 0 or len(self.images_right) > 0):
+
+        if self.zoom and not hasattr(self, 'im'):
             coords = self.true_coordinates(event.x, event.y)
 
+            print('clicked')
+            #if zooming in, add rectangle point
+            im = self.images[self.im_index]
+            im = im.convert('RGBA')
+            #im = Image.blend(im, draw, 1)
+
+            #REMOVE
+            self.images[self.im_index] = im
+
+            self.im= ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
+                                           int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
+      
+            self.im_zoom = self.canvas.create_image(0, 0, image=self.im, anchor=N+W, tag='zoom')
+            #bind canvas cursor movement to creating a rectangle, unbind after zoom done
+            self.canvas.bind('<Motion>', lambda event, coords = coords : self.zoom_rec(event,coords))
+            
+            self.zoom_coords = event
+            print('done')
+
+        elif self.zoom: #has first point placed
+            print('second point, do zoom here')
+            
+            rec = [(self.zoom_coords.x, self.zoom_coords.y), 
+                   (event.x, event.y),
+                   (self.zoom_coords.x + event.x, self.zoom_coords.y),
+                   (self.zoom_coords.x, self.zoom_coords.y + event.y)]
+
+            top_left = np.array(rec[0])
+            if rec[0][0] > rec[1][0]:
+                top_left = np.array(rec[1])
+
+            print(self.imscale, ', ', self.canvas.winfo_width())
+
+            if top_left[0] < top_left[1]:
+                self.imscale *= self.canvas.winfo_width() / abs(rec[0][0] - rec[1][0])
+            else:
+                self.imscale *= self.canvas.winfo_height() / abs(rec[0][1] - rec[1][1])
+
+            print(self.imscale)
+
+            #first, zoom image using pil
+            im = self.images[self.im_index]
+            draw = ImageDraw.Draw(im)
+
+            self.im_left = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
+                                           int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
+           
+            #update top_left coords after transformation
+            top_left = self.true_coordinates(top_left[0], top_left[1])
+            x = int(top_left[0] * self.imscale)
+            y = int(top_left[1] * self.imscale)
+            
+            print(self.canvas.canvasx(0), ', ', self.canvas.canvasy(0))
+
+            self.im_left_cn = self.canvas.create_image(0, 0, image=self.im_left, anchor=N+W)
+            
+            #height and width move over
+            self.canvas.scan_mark(int(self.canvas.canvasx(x)), 
+                                  int(self.canvas.canvasy(y)))
+
+            self.canvas.scan_dragto(int(self.canvas.canvasx(0)), 
+                                    int(self.canvas.canvasy(0)))
+
+
+            self.canvas.update()
+
+            #reset
+            self.canvas.unbind('<Motion>')
+            del self.zoom_coords
+            del self.im, self.im_zoom
+            self.zoom = False
+
+        elif (len(self.images) > 0 or len(self.images_right) > 0):
+            coords = self.true_coordinates(event.x, event.y)
             curr = len(self.points[self.im_index]) - 1
 
             if self.points[self.im_index][curr] == None:
