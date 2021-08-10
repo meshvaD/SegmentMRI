@@ -559,14 +559,10 @@ class SegmentMRI(Frame):
             if rec[0][0] > rec[1][0]:
                 top_left = np.array(rec[1])
 
-            print(self.imscale, ', ', self.canvas.winfo_width())
-
             if top_left[0] < top_left[1]:
                 self.imscale *= self.canvas.winfo_width() / abs(rec[0][0] - rec[1][0])
             else:
                 self.imscale *= self.canvas.winfo_height() / abs(rec[0][1] - rec[1][1])
-
-            print(self.imscale)
 
             #first, zoom image using pil
             im = self.images[self.im_index]
@@ -577,20 +573,21 @@ class SegmentMRI(Frame):
            
             #update top_left coords after transformation
             top_left = self.true_coordinates(top_left[0], top_left[1])
-            x = int(top_left[0] * self.imscale)
-            y = int(top_left[1] * self.imscale)
-            
+            x = int(top_left[0] * self.imscale * 10)
+            y = int(top_left[1] * self.imscale * 10)
+
+            print(x, ', ', y)
+            draw.ellipse((x, y, x+20, y+20), fill='red', outline='red')
+            self.images[self.im_index] = im
+
             print(self.canvas.canvasx(0), ', ', self.canvas.canvasy(0))
 
             self.im_left_cn = self.canvas.create_image(0, 0, image=self.im_left, anchor=N+W)
             
             #height and width move over
-            self.canvas.scan_mark(int(self.canvas.canvasx(x)), 
-                                  int(self.canvas.canvasy(y)))
+            self.canvas.scan_mark(x, y)
 
-            self.canvas.scan_dragto(int(self.canvas.canvasx(0)), 
-                                    int(self.canvas.canvasy(0)))
-
+            self.canvas.scan_dragto(0, 0)
 
             self.canvas.update()
 
