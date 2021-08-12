@@ -4,7 +4,7 @@
 block_cipher = None
 
 
-a = Analysis(['SegmentMRI\\SegmentMRI.py'],
+a = Analysis(['SegmentMRI\\SegmentMRI_Single.py'],
              pathex=['C:\\Users\\HS student\\source\\repos\\SegmentMRI'],
              binaries=[],
              datas=[],
@@ -32,7 +32,7 @@ exe = EXE(pyz,
           a.zipfiles,
           a.datas,  
           [],
-          name='SegmentMRI',
+          name='SegmentMRI_Single',
           debug=False,
           bootloader_ignore_signals=False,
           strip=False,

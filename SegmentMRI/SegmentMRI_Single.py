@@ -29,13 +29,10 @@ class SegmentMRI(Frame):
         self.parent = parent
 
         self.images = []
-        self.images_right = []
         self.im_index = 0
 
         self.alpha = 1.0 #0=black, 1=original image
         self.beta = 1.0 #0-2.0 1=normal, blur to sharp
-        self.alpha_right = 1.0
-        self.beta_right = 1.0
 
         self.upsample = 10 #no user input, default to 10
         self.pan = False
@@ -61,9 +58,6 @@ class SegmentMRI(Frame):
         self.canvas = Canvas(parent, width=400, height=400, bg='white')
         self.canvas.grid(row=1, column=1, sticky = N+S+E+W, pady=5)
 
-        self.canvas_right = Canvas(parent, width=400, height=400, bg='white')
-        self.canvas_right.grid(row=1, column=2, sticky = N+S+E+W, pady=5)
-
         #canvas entry labels: top frame
         ftop1 = Frame(parent)
 
@@ -77,33 +71,17 @@ class SegmentMRI(Frame):
         self.l_title.grid(row=0, column=2, sticky=W)
 
         ftop1.grid(row=0, column=1, sticky=W)
-        ftop2 = Frame(parent)
 
-        self.btn_right = Button(ftop2, text='Select Image', command=lambda name='right':self.select_image(name), bg='gray')
-        self.btn_right.grid(row=0, column=3, sticky=W)
-
-        r_lb = Label(ftop2, text='Image Name')
-        r_lb.grid(row=0, column=4, sticky=W)
-        self.r_title = Entry(ftop2)
-        self.r_title.insert(-1, 'T1w')
-        self.r_title.grid(row=0, column=5, sticky=W)
-
-        ftop2.grid(row=0, column=2, sticky=W)
 
         self.canvas.bind('<MouseWheel>', self.next_image)
         self.canvas.bind('<ButtonPress-1>', self.move_from)
         self.canvas.bind('<B1-Motion>', self.move_to)
-
-        self.canvas_right.bind('<MouseWheel>', self.next_image)
-        self.canvas_right.bind('<ButtonPress-1>', self.move_from)
-        self.canvas_right.bind('<B1-Motion>', self.move_to)
 
         export_btn = Button(parent, text='Export', command=self.export)
         export_btn.grid(row=4, column=1, sticky=W, pady=5)
 
         reset_btn = Button(parent, text='Reset', command=self.reset)
         reset_btn.grid(row=5, column=1, sticky=W, pady=5)
-
 
         #left panel frame
         self.f2 = Frame(parent)
@@ -172,8 +150,8 @@ class SegmentMRI(Frame):
 
         #error label
         self.error = StringVar(self.f2)
-        error_label = Label(self.f2, textvariable=self.error)
-        error_label.grid(row=6, column=0, columnspan=2)
+        self.error_label = Label(self.f2, textvariable=self.error)
+        self.error_label.grid(row=6, column=0, columnspan=2)
 
 
     def explore(self, file, side, win=None, zip=None):
@@ -258,21 +236,7 @@ class SegmentMRI(Frame):
             pil_im = pil_im.resize((int(pil_im.size[0] * self.upsample), 
                                     int(pil_im.size[1] * self.upsample)))
 
-            if side == 'left':
-                self.images.append(pil_im)
-            elif side == 'right':
-                self.images_right.append(pil_im)
-
-        #modify image list if there are two
-        l = len(self.images)
-        r = len(self.images_right)
-
-        if r > 0 and l > r:
-            diff = l-r
-            self.images = self.images[int(diff/2):l-int(diff/2)]
-        elif l > 0 and r > l:
-            diff = r-l
-            self.images_right = self.images_right[int(diff/2):r-int(diff/2)]
+            self.images.append(pil_im)
 
         #array with pil images
 
@@ -294,8 +258,6 @@ class SegmentMRI(Frame):
         #create none list
         if len(self.points) == 0:
             l = len(self.images)
-            if len(self.images_right) > l:
-                l = len(self.images_right)
 
             for i in range (0, l):
                 self.points.append([None])
@@ -303,69 +265,38 @@ class SegmentMRI(Frame):
         #point info frame shown after first selected
         self.f2.grid(row=0, column=0, rowspan=2, sticky=N+S)
 
-        if name == 'left':
-            self.change_image(1, 'left') #change left image
+        self.change_image(1) #change left image
 
-            self.btn.grid_forget() #cannot choose new files for first canvas
+        self.btn.grid_forget() #cannot choose new files for first canvas
 
-            f1 = Frame(self.parent, width=400, height=30)
+        f1 = Frame(self.parent, width=400, height=30)
 
-            #brightness scale
-            brightness_text = Label(f1, text='Brightness: ')
-            brightness_text.grid(row=0, column=0, sticky=W, pady=0)
+        #brightness scale
+        brightness_text = Label(f1, text='Brightness: ')
+        brightness_text.grid(row=0, column=0, sticky=W, pady=0)
 
-            brightness_scale = Scale(f1, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
-                                        resolution = 0.01, command=self.change_brightness)
-            brightness_scale.grid(row=1, column=0, sticky=W)
-            brightness_scale.set(1.0)
+        brightness_scale = Scale(f1, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
+                                    resolution = 0.01, command=self.change_brightness)
+        brightness_scale.grid(row=1, column=0, sticky=W)
+        brightness_scale.set(1.0)
 
-            #contrast scale
-            contrast_text = Label(f1, text='Contrast: ')
-            contrast_text.grid(row=3, column=0, sticky=W, pady=0)
+        #contrast scale
+        contrast_text = Label(f1, text='Contrast: ')
+        contrast_text.grid(row=3, column=0, sticky=W, pady=0)
 
-            contrast_scale = Scale(f1, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
-                                    resolution=0.01, command=self.change_contrast)
-            contrast_scale.grid(row=4, column=0, stick=W)
-            contrast_scale.set(1.0)
+        contrast_scale = Scale(f1, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
+                                resolution=0.01, command=self.change_contrast)
+        contrast_scale.grid(row=4, column=0, stick=W)
+        contrast_scale.set(1.0)
 
-            f1.grid(row=2, column = 1, rowspan=2, sticky=N+S)
+        f1.grid(row=2, column = 1, rowspan=2, sticky=N+S)
 
-        elif name == 'right':
-            self.btn_right.grid_forget()
 
-            f3 = Frame(self.parent, width=400, height=30)
-
-            #brightness scale
-            brightness_text = Label(f3, text='Brightness: ')
-            brightness_text.grid(row=0, column=0, sticky=W, pady=0)
-
-            brightness_scale_right = Scale(f3, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
-                                        resolution = 0.01, command=self.change_brightness_right)
-            brightness_scale_right.grid(row=1, column=0, sticky=W)
-            brightness_scale_right.set(1.0)
-
-            #contrast scale
-            contrast_text = Label(f3, text='Contrast: ')
-            contrast_text.grid(row=3, column=0, sticky=W, pady=0)
-
-            contrast_scale_right = Scale(f3, orient=HORIZONTAL, length=300, from_=0.0, to=5.0,
-                                    resolution=0.01, command=self.change_contrast_right)
-            contrast_scale_right.grid(row=4, column=0, stick=W)
-            contrast_scale_right.set(1.0)
-
-            f3.grid(row=2, column = 2, rowspan=2, sticky=N+S)
-
-    def change_image(self, val, side): #update image displayed after each change
-        if side == 'left':
-            im = self.images[self.im_index]
-            cn = self.canvas
-            a = self.alpha
-            b = self.beta
-        elif side == 'right':
-            im = self.images_right[self.im_index]
-            cn = self.canvas_right
-            a = self.alpha_right
-            b = self.beta_right
+    def change_image(self, val): #update image displayed after each change
+        im = self.images[self.im_index]
+        cn = self.canvas
+        a = self.alpha
+        b = self.beta
     
         ##image controls
         b_converter = ImageEnhance.Brightness(im)
@@ -380,19 +311,15 @@ class SegmentMRI(Frame):
 
         cn.delete('all')
         # +1 to avoid im with size 0 (zoom out too much)
-        if side == 'left':
-            self.im_left = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
-                                           int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
-            self.im_left_cn = cn.create_image(0, 0, image=self.im_left, anchor=N+W)
-            self.canvas.move(self.im_left_cn, self.im_move[0], self.im_move[1])
-        elif side == 'right':
-            self.im_right = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
-                                           int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
-            self.im_right_cn = cn.create_image(0, 0, image=self.im_right, anchor=N+W)
-
+        self.im_left = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
+                                        int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
+        self.im_left_cn = cn.create_image(0, 0, image=self.im_left, anchor=N+W)
+        self.canvas.move(self.im_left_cn, self.im_move[0], self.im_move[1])
+       
         #REPEATEDLY CREATE ACCUMULATES MEMORY
         #panelA = Label(image = im)
         #panelA.image = im
+        return im
 
 
     def draw_contours(self, points, index, im):
@@ -424,27 +351,17 @@ class SegmentMRI(Frame):
     def change_brightness(self, val):
         self.alpha = float(val)
 
-        self.change_image(self.im_index+1, 'left')
+        self.change_image(self.im_index+1)
 
     def change_contrast(self, val):
         self.beta = float(val)
     
-        self.change_image(self.im_index+1, 'left')
+        self.change_image(self.im_index+1)
 
-    def change_brightness_right(self, val):
-        self.alpha_right = float(val)
 
-        self.change_image(self.im_index+1, 'right')
-
-    def change_contrast_right(self, val):
-        self.beta_right = float(val)
-    
-        self.change_image(self.im_index+1, 'right')
   
     def next_image(self, event):
         l = len(self.images)
-        if len(self.images_right) > l:
-            l = len(self.images_right)
 
         if event.delta > 0 and self.im_index < l-1:
             self.im_index += 1
@@ -484,9 +401,6 @@ class SegmentMRI(Frame):
             self.canvas.xview_moveto(0)
             self.canvas.yview_moveto(0)
 
-            self.canvas_right.xview_moveto(0)
-            self.canvas_right.yview_moveto(0)
-
             self.update_all()
         return True
 
@@ -502,35 +416,19 @@ class SegmentMRI(Frame):
         self.update_all()
 
     def zoom_rec(self, event, coords):
-        #show rec on left canvas
-        if len(self.images) > 0:
-            im = self.images[self.im_index]
-            im = im.convert('RGBA')
-            draw = ImageDraw.Draw(im)
+        im = self.images[self.im_index]
+        im = im.convert('RGBA')
+        draw = ImageDraw.Draw(im)
 
-            coords2 = self.true_coordinates(event.x, event.y)
+        coords2 = self.true_coordinates(event.x, event.y)
         
-            draw.rectangle([coords, coords2], outline=(255, 0, 0), width=5)
+        draw.rectangle([coords, coords2], outline=(255, 0, 0), width=5)
 
-            self.im = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
-                                            int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
+        self.im = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
+                                        int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
       
-            rec_im = self.canvas.create_image(0, 0, image=self.im, anchor=N+W)
-            self.canvas.move(rec_im, self.im_move[0], self.im_move[1])
-
-        #show rec on right canvas
-        if len(self.images_right) > 0:
-            im_r = self.images_right[self.im_index]
-            im_r = im_r.convert('RGBA')
-            draw_r = ImageDraw.Draw(im_r)
-        
-            draw_r.rectangle([coords, coords2], outline=(255, 0, 0), width=5)
-
-            self.im_r = ImageTk.PhotoImage(im_r.resize((int(im_r.size[0] * abs(self.imscale)+1), 
-                                            int(im_r.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
-      
-            rec_im_r = self.canvas_right.create_image(0, 0, image=self.im_r, anchor=N+W)
-            self.canvas_right.move(rec_im_r, self.im_move[0], self.im_move[1])
+        rec_im = self.canvas.create_image(0, 0, image=self.im, anchor=N+W)
+        self.canvas.move(rec_im, self.im_move[0], self.im_move[1])
  
     def allow_pan(self, a):
         if a:
@@ -545,10 +443,7 @@ class SegmentMRI(Frame):
             x = event.x
             y = event.y
 
-            print('scan mark: ', x, ', ', y)
-
             self.canvas.scan_mark(x, y)
-            self.canvas_right.scan_mark(x, y)
         else:
             self.add_point(event)
 
@@ -558,7 +453,6 @@ class SegmentMRI(Frame):
             y = event.y
 
             self.canvas.scan_dragto(x, y, gain=1)
-            self.canvas_right.scan_dragto(x, y, gain=1)
 
     #point/ contour selection
     def add_point(self, event):
@@ -566,42 +460,8 @@ class SegmentMRI(Frame):
         if self.zoom and not hasattr(self, 'im'):
             coords = self.true_coordinates(event.x, event.y)
 
-            if len(self.images) > 0:
-                #if zooming in, add rectangle point
-                im = self.images[self.im_index]
-                im = im.convert('RGBA')
-                #im = Image.blend(im, draw, 1)
-
-                #REMOVE
-                self.images[self.im_index] = im
-
-                self.im= ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
-                                               int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
-      
-                self.im_zoom = self.canvas.create_image(0, 0, image=self.im, anchor=N+W, tag='zoom')
-                self.im_zoom = self.canvas.move(self.im_left_cn, self.im_move[0], self.im_move[1])
+            self.canvas.bind('<Motion>', lambda event, coords = coords : self.zoom_rec(event,coords))
             
-                #bind canvas cursor movement to creating a rectangle, unbind after zoom done
-                self.canvas.bind('<Motion>', lambda event, coords = coords : self.zoom_rec(event,coords))
-            
-            if len(self.images_right) > 0:
-                #if zooming in, add rectangle point
-                im_r = self.images_right[self.im_index]
-                im_r = im_r.convert('RGBA')
-
-                #REMOVE
-                self.images_right[self.im_index] = im_r
-
-                self.im_r = ImageTk.PhotoImage(im_r.resize((int(im.size[0] * abs(self.imscale)+1), 
-                                               int(im_r.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
-      
-                self.im_zoom_right = self.canvas_right.create_image(0, 0, image=self.im_r, anchor=N+W, tag='zoom')
-                self.im_zoom_right = self.canvas_right.move(self.im_right_cn, self.im_move[0], self.im_move[1])
-            
-                #bind canvas cursor movement to creating a rectangle, unbind after zoom done
-                self.canvas_right.bind('<Motion>', lambda event, coords = coords : self.zoom_rec(event,coords))
-            
-
             self.zoom_coords = event
 
         elif self.zoom: #has first point placed            
@@ -619,7 +479,8 @@ class SegmentMRI(Frame):
                 if rec[i][1] < top_left[1]:
                     top_left[1] = rec[i][1]
 
-            #print('top left coords: ', top_left)
+            #first, zoom image using pil
+            im = self.images[self.im_index]
 
             #update top_left coords after transformation
             c = self.true_coordinates(top_left[0], top_left[1])
@@ -635,59 +496,43 @@ class SegmentMRI(Frame):
                 self.imscale *= self.canvas.winfo_height() / abs(rec[0][1] - rec[2][1])
 
 
-            #first, zoom image using pil
-            if len(self.images) > 0:
-                im = self.images[self.im_index]
-                self.im_left = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
-                                               int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
+            self.im_left = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
+                                           int(im.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
            
-                self.images[self.im_index] = im
-
-                self.im_left_cn = self.canvas.create_image(0,0,image=self.im_left, anchor=N+W)
             
-                im_bbox = self.canvas.bbox(self.im_left_cn) #image canvas coords
-
-                im_size = self.images[self.im_index].size #true image size
-
-                can_x = int(x/im_size[0] * im_bbox[2])
-                can_y = int(y/im_size[1] * im_bbox[3])
-
-            if len (self.images_right) > 0:
-                im_r = self.images_right[self.im_index]
-                self.im_right = ImageTk.PhotoImage(im_r.resize((int(im_r.size[0] * abs(self.imscale)+1), 
-                                               int(im_r.size[1] * abs(self.imscale)+1))), Image.LANCZOS)
-           
-                self.images_right[self.im_index] = im_r
-
-                self.im_right_cn = self.canvas_right.create_image(0,0,image=self.im_right, anchor=N+W)
+            self.im_left_cn = self.canvas.create_image(0,0,image=self.im_left, anchor=N+W)
             
-                im_bbox = self.canvas_right.bbox(self.im_right_cn) #image canvas coords
+            im_bbox = self.canvas.bbox(self.im_left_cn)
+            #print('image canvas coords: ', im_bbox)
 
-                im_size = self.images[self.im_index].size #true image size
+            im_size = self.images[self.im_index].size
+            #print('true image size: ', im_size)
 
-                can_x = int(x/im_size[0] * im_bbox[2])
-                can_y = int(y/im_size[1] * im_bbox[3])
 
+            can_x = int(x/im_size[0] * im_bbox[2])
+            can_y = int(y/im_size[1] * im_bbox[3])
+
+            #print('canvas image coords: ', can_x, ', ', can_y)
+
+            #self.canvas.move(self.im_left_cn, self.im_move[0], self.im_move[1])
+
+            #print('canvas size: ', self.canvas.winfo_width(), ', ', self.canvas.winfo_height())
+
+            #height and width move over
             self.canvas.scan_mark(int(can_x - self.canvas.canvasx(0)), 
-                                    int(can_y - self.canvas.canvasy(0)))
+                                  int(can_y - self.canvas.canvasy(0)))
+
             self.canvas.scan_dragto(0, 0, gain=1)
+
             self.canvas.update()
 
-            self.canvas_right.scan_mark(int(can_x - self.canvas_right.canvasx(0)), 
-                                    int(can_y - self.canvas_right.canvasy(0)))
-            self.canvas_right.scan_dragto(0, 0, gain=1)
-            self.canvas_right.update()
-
-            self.update_all()
-
-            #reset
+            #reset 
             self.canvas.unbind('<Motion>')
-            self.canvas_right.unbind('<Motion>')
             del self.zoom_coords
-            del self.im, self.im_zoom
+            del self.im #, self.im_zoom
             self.zoom = False
 
-        elif (len(self.images) > 0 or len(self.images_right) > 0):
+        elif (len(self.images) > 0):
             coords = self.true_coordinates(event.x, event.y)
             curr = len(self.points[self.im_index]) - 1
 
@@ -702,7 +547,7 @@ class SegmentMRI(Frame):
                 list.append(coords)
                 self.points[self.im_index][curr] = list
         
-            self.update_all()
+        self.update_all()
 
     def undo_point(self):
         curr = len(self.points[self.im_index]) - 1
@@ -721,7 +566,6 @@ class SegmentMRI(Frame):
     def save_contour(self):
         #add with target to df array: slice + target + coords
         if self.target_input.get() == '':
-            print('enter target id')
             self.error.set('enter target id')
         elif self.points[self.im_index][-1] == None or self.points[self.im_index][-1] == [None]:
             self.error.set('no points selected')
@@ -758,12 +602,7 @@ class SegmentMRI(Frame):
                 if title == '':
                     title = '1'
                 self.to_tiff(self.images, directory + '/' + (fpath + '_' + title) + '.tiff')
-            if len(self.images_right) > 0:
-                title = self.r_title.get()
-                if title == '':
-                    title = '2'
-                self.to_tiff(self.images_right, directory + '/' + (fpath + '_' + title) + '.tiff')
-
+            
     def to_tiff(self, ims, fpath):
         fpath = fpath.replace('*', '')
         with tiff.TiffWriter(fpath) as stack:
@@ -834,14 +673,9 @@ class SegmentMRI(Frame):
 
     def update_all(self):
         if len(self.images) > 0:
-            self.change_image(self.im_index+1, 'left')
-        if len(self.images_right) > 0:
-            self.change_image(self.im_index+1, 'right')
-
-
+            self.change_image(self.im_index+1)
         
 #start
-
 root = Tk()
 SegmentMRI(root)
 root.mainloop()
