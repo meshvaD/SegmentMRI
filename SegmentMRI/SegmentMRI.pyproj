@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>a8ff7c9a-9d39-4f58-a31b-1f310a46ba94</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>SegmentMRI.py</StartupFile>
+    <StartupFile>SegmentMRI_Single.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -25,7 +25,7 @@
     <Compile Include="FileExplorer.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="SegmentMRI.py" />
+    <Compile Include="SegmentMRI_Single.py" />
     <Compile Include="setup.py">
       <SubType>Code</SubType>
     </Compile>
