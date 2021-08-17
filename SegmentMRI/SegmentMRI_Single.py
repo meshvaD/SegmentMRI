@@ -41,6 +41,8 @@ class SegmentMRI(Frame):
         self.points = []
         self.data = []
 
+        self.ovals = []
+
         #initialize and bind components 
         parent.title('Segment Images')
         self.parent.config(cursor='tcross')
@@ -123,11 +125,11 @@ class SegmentMRI(Frame):
         self.zoom_input.grid(row=4, column=1, sticky=E)
 
         self.zoom_in = ImageTk.PhotoImage(Image.open(basepath + 'zoom_in.png').resize((20,20)))
-        zoomin_btn = Button(self.f2, image = self.zoom_in, width=20, height=20, command=lambda zoom=0.1:self.zoomer(zoom))
+        zoomin_btn = Button(self.f2, image = self.zoom_in, width=20, height=20, command= self.allow_zoom)
         zoomin_btn.grid(row=4, column=3, pady=5, sticky=W)
 
         self.zoom_out = ImageTk.PhotoImage(Image.open(basepath + 'zoom_out.png').resize((20,20)))
-        zoomout_btn = Button(self.f2, image = self.zoom_out, width=20, height=20, command=lambda zoom=-0.1:self.zoomer(zoom))
+        zoomout_btn = Button(self.f2, image = self.zoom_out, width=20, height=20, command=lambda zoom=-self.imscale/5:self.zoomer(zoom))
         zoomout_btn.grid(row=4, column=2, pady=5, sticky=E)
 
         #upscale image input
@@ -309,11 +311,8 @@ class SegmentMRI(Frame):
                 b = self.beta
                 c_converter = ImageEnhance.Contrast(im)
                 im = c_converter.enhance(b)
-            if event == 'point' or 'next':
-                im = im.convert('RGBA')
-                im = self.draw_contours(self.points, self.im_index, im)
-
-            cn.delete('all')
+            if event == 'contour':
+                cn.delete('all')
             self.im_left = ImageTk.PhotoImage(im)
             #self.im_left = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
             #                                int(im.size[1] * abs(self.imscale)+1))))
@@ -322,32 +321,37 @@ class SegmentMRI(Frame):
             return im
 
 
-    def draw_contours(self, points, index, im):
+    def draw_contours(self, im):
+        points = self.points
+        index = self.im_index
+
+        self.ovals = [] #reset oval locs on zoom
+
+        im = im.convert('RGBA')
         if points[index] != None:
-            for i in range (0, len(points[index])):
+            for i in range(0, len(points[index])):
                 cont = points[index][i]
                 if cont != None:
                     cont_scaled = []
-                    #draw contour points
+                    #draw contour
                     draw = ImageDraw.Draw(im)
                     for j in range(0, len(cont)):
                         p = cont[j]
                         if p != None:
-                            p = (p[0] * self.imscale, p[1] * self.imscale)
-                            cont_scaled.append(p)
-                            draw.ellipse((p[0], p[1], p[0]+1, p[1]+1), fill='blue', outline='blue')
+                            #p = (p[0] * self.imscale, p[1] * self.imscale)
+                            #cont_scaled.append(p)
+                            #draw.ellipse((p[0], p[1], p[0]+1, p[1]+1), fill='red', outline='red')
 
-                    #draw connecting lines
-                    if len(cont) > 1:
-                        self.connect_points(cont_scaled, draw)
+                            x = p[0] * self.imscale
+                            y = p[1] * self.imscale
 
-                    #colour in contour if not line
-                    if len(cont) > 2 and i != len(points[index])-1:
-                        poly = im.copy()
-                        poly_draw = ImageDraw.Draw(poly)
-                        poly_draw.polygon(cont_scaled, fill='blue')
+                            o = self.canvas.create_oval(x-1, y-1, x+1, y+1, outline='blue', fill='blue')
+                            self.ovals.append(o)
+                            self.canvas.update()
 
-                        im = Image.blend(im, poly, 0.2)
+                    #draw connecting lines if saved contour
+                    if len(cont) > 2 and i != len(points[index])-1 and j>0:
+                        self.canvas.create_polygon(cont)
 
         return im
 
@@ -414,14 +418,15 @@ class SegmentMRI(Frame):
             self.canvas.xview_moveto(0)
             self.canvas.yview_moveto(0)
 
-            self.change_image(self.im_index+1, 'point')
+            #self.change_image(self.im_index+1, 'point')
+            if len(self.images) > 0:
+                self.draw_contours(self.images[self.im_index])
         return True
 
     def allow_zoom(self):
         self.zoom = True
 
     def zoomer(self, scale): 
-        print(self.imscale)
         factor = abs(self.imscale + scale) / self.imscale
 
         self.imscale = abs(self.imscale + scale)
@@ -433,6 +438,7 @@ class SegmentMRI(Frame):
         self.canvas.scale('all', 0, 0, scale, scale)
 
         self.change_image(self.im_index+1, 'zoom')
+        self.draw_contours(self.images[self.im_index])
 
     def zoom_rec(self, event, coords):
         im = self.images[self.im_index]
@@ -514,8 +520,7 @@ class SegmentMRI(Frame):
             self.images[self.im_index] = im.resize((int(im.size[0] * factor +1), 
                                         int(im.size[1] * factor +1)))
 
-            self.im_left = ImageTk.PhotoImage(self.images[self.im_index])
-            self.im_left_cn = self.canvas.create_image(0,0,image=self.im_left, anchor=N+W)
+            self.change_image(self.im_index+1, 'zoom')
 
             #pan to rectangle
             c = self.true_coordinates(top_left[0], top_left[1])
@@ -537,6 +542,9 @@ class SegmentMRI(Frame):
             del self.im #, self.im_zoom
             self.zoom = False
 
+            #self.change_image(self.im_index+1, 'point')
+            self.draw_contours(self.images[self.im_index])
+
         elif (len(self.images) > 0):
             coords = self.true_coordinates(event.x, event.y)
             curr = len(self.points[self.im_index]) - 1
@@ -551,8 +559,16 @@ class SegmentMRI(Frame):
                 list = self.points[self.im_index][curr]
                 list.append(coords)
                 self.points[self.im_index][curr] = list
+
+            #self.draw_contours(self.images[self.im_index])
+
+            x = self.canvas.canvasx(event.x)
+            y = self.canvas.canvasy(event.y)
+
+            o = self.canvas.create_oval(x-1, y-1, x+1, y+1, fill='blue', outline='blue')
+            self.ovals.append(o)
+            self.canvas.update()
         
-        self.change_image(self.im_index+1, 'point')
 
     def undo_point(self):
         curr = len(self.points[self.im_index]) - 1
@@ -566,7 +582,16 @@ class SegmentMRI(Frame):
         elif len(self.points[self.im_index][curr]) > 1:
             del self.points[self.im_index][curr][-1]
 
-        self.change_image(self.im_index+1, 'point')
+        
+        print(self.ovals)
+        if len(self.ovals) > 0:
+            self.canvas.delete(self.ovals[-1])
+            self.canvas.delete(str(curr))
+            del self.ovals[-1]
+            self.canvas.update()
+
+        #self.change_image(self.im_index+1, 'point')
+        #self.draw_contours(self.images[self.im_index])
 
     def save_contour(self):
         #add with target to df array: slice + target + coords
@@ -584,7 +609,8 @@ class SegmentMRI(Frame):
                               points, area])
             self.points[self.im_index].append([None])
 
-            self.change_image(self.im_index+1, 'point')
+            #self.change_image(self.im_index+1, 'point')
+            self.draw_contours(self.images[self.im_index])
 
     def reset(self):
         self.__init__(self.parent)

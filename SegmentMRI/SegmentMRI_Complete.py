@@ -148,7 +148,7 @@ class SegmentMRI(Frame):
         self.zoom_input.grid(row=4, column=1, sticky=E)
 
         self.zoom_in = ImageTk.PhotoImage(Image.open(basepath + 'zoom_in.png').resize((20,20)))
-        zoomin_btn = Button(self.f2, image = self.zoom_in, width=20, height=20, command=lambda x: self.allow_zoom())
+        zoomin_btn = Button(self.f2, image = self.zoom_in, width=20, height=20, command=self.allow_zoom)
         zoomin_btn.grid(row=4, column=3, pady=5, sticky=W)
 
         self.zoom_out = ImageTk.PhotoImage(Image.open(basepath + 'zoom_out.png').resize((20,20)))
