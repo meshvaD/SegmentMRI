@@ -42,6 +42,7 @@ class SegmentMRI(Frame):
         self.data = []
 
         self.ovals = []
+        self.polygons = []
 
         #initialize and bind components 
         parent.title('Segment Images')
@@ -311,47 +312,53 @@ class SegmentMRI(Frame):
                 b = self.beta
                 c_converter = ImageEnhance.Contrast(im)
                 im = c_converter.enhance(b)
-            if event == 'contour':
-                cn.delete('all')
+
             self.im_left = ImageTk.PhotoImage(im)
             #self.im_left = ImageTk.PhotoImage(im.resize((int(im.size[0] * abs(self.imscale)+1), 
             #                                int(im.size[1] * abs(self.imscale)+1))))
             self.im_left_cn = cn.create_image(0, 0, image=self.im_left, anchor=N+W)
-        
-            return im
 
+            if event == 'point' or event == 'next':
+                self.draw_contours(im)
+        
+
+    def delete_canvas_elements(self, list):
+        for i in list:
+            self.canvas.delete(i)
+            del i
+        self.canvas.update()
 
     def draw_contours(self, im):
         points = self.points
         index = self.im_index
 
         self.ovals = [] #reset oval locs on zoom
+        self.polygons = []
 
-        im = im.convert('RGBA')
         if points[index] != None:
             for i in range(0, len(points[index])):
                 cont = points[index][i]
                 if cont != None:
-                    cont_scaled = []
-                    #draw contour
-                    draw = ImageDraw.Draw(im)
+                    #draw points
+                    cont_scaled=[]
+                    
                     for j in range(0, len(cont)):
                         p = cont[j]
                         if p != None:
-                            #p = (p[0] * self.imscale, p[1] * self.imscale)
-                            #cont_scaled.append(p)
-                            #draw.ellipse((p[0], p[1], p[0]+1, p[1]+1), fill='red', outline='red')
-
                             x = p[0] * self.imscale
                             y = p[1] * self.imscale
+                            cont_scaled.append(x)
+                            cont_scaled.append(y)
 
-                            o = self.canvas.create_oval(x-1, y-1, x+1, y+1, outline='blue', fill='blue')
-                            self.ovals.append(o)
-                            self.canvas.update()
+                            if i == len(points[index])-1:
+                                o = self.canvas.create_oval(x-1, y-1, x+1, y+1, outline='red', fill='blue')
+                                self.ovals.append(o)
+                                self.canvas.update()
 
                     #draw connecting lines if saved contour
-                    if len(cont) > 2 and i != len(points[index])-1 and j>0:
-                        self.canvas.create_polygon(cont)
+                    if len(cont) > 2 and i != len(points[index])-1:
+                        self.polygons.append(self.canvas.create_polygon(cont_scaled, outline='blue', fill=''))
+                        self.canvas.update()
 
         return im
 
@@ -577,16 +584,15 @@ class SegmentMRI(Frame):
         elif self.points[self.im_index][curr][-1] == None and len(self.data) > 0:
             del self.points[self.im_index][curr]
             del self.data[-1]
+
+            self.change_image(self.im_index+1, 'point')
         elif len(self.points[self.im_index][curr]) == 1:
             self.points[self.im_index][curr][-1] = None
         elif len(self.points[self.im_index][curr]) > 1:
             del self.points[self.im_index][curr][-1]
 
-        
-        print(self.ovals)
         if len(self.ovals) > 0:
             self.canvas.delete(self.ovals[-1])
-            self.canvas.delete(str(curr))
             del self.ovals[-1]
             self.canvas.update()
 
