@@ -130,7 +130,7 @@ class SegmentMRI(Frame):
         zoomin_btn.grid(row=4, column=3, pady=5, sticky=W)
 
         self.zoom_out = ImageTk.PhotoImage(Image.open(basepath + 'zoom_out.png').resize((20,20)))
-        zoomout_btn = Button(self.f2, image = self.zoom_out, width=20, height=20, command=lambda zoom=-self.imscale/5:self.zoomer(zoom))
+        zoomout_btn = Button(self.f2, image = self.zoom_out, width=20, height=20, command=lambda zoom=-0.5:self.zoomer(zoom))
         zoomout_btn.grid(row=4, column=2, pady=5, sticky=E)
 
         #upscale image input
@@ -351,7 +351,7 @@ class SegmentMRI(Frame):
                             cont_scaled.append(y)
 
                             if i == len(points[index])-1:
-                                o = self.canvas.create_oval(x-1, y-1, x+1, y+1, outline='red', fill='blue')
+                                o = self.canvas.create_oval(x-1, y-1, x+1, y+1, outline='blue', fill='blue')
                                 self.ovals.append(o)
                                 self.canvas.update()
 
@@ -569,8 +569,12 @@ class SegmentMRI(Frame):
 
             #self.draw_contours(self.images[self.im_index])
 
-            x = self.canvas.canvasx(event.x)
-            y = self.canvas.canvasy(event.y)
+            #x = self.canvas.canvasx(event.x)
+            #y = self.canvas.canvasy(event.y)
+
+            #find x and y from coords to make sure correct stored
+            x = coords[0] * self.imscale
+            y = coords[1] * self.imscale
 
             o = self.canvas.create_oval(x-1, y-1, x+1, y+1, fill='blue', outline='blue')
             self.ovals.append(o)
@@ -652,8 +656,8 @@ class SegmentMRI(Frame):
     #other functions
 
     def true_coordinates(self, x, y):
-        true_x = int((x + self.canvas.canvasx(0)) / self.imscale)
-        true_y = int((y + self.canvas.canvasy(0)) / self.imscale)
+        true_x = (x + self.canvas.canvasx(0)) / self.imscale
+        true_y = (y + self.canvas.canvasy(0)) / self.imscale
 
         return (true_x, true_y)
 
