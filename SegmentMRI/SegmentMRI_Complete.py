@@ -44,6 +44,9 @@ class SegmentMRI(Frame):
         self.points = []
         self.data = []
 
+        self.ovals = []
+        self.polygons = []
+
         #initialize and bind components 
         parent.title('Segment Images')
         self.parent.config(cursor='tcross')
@@ -276,6 +279,9 @@ class SegmentMRI(Frame):
             diff = r-l
             self.images_right = self.images_right[int(diff/2):r-int(diff/2)]
 
+        print(len(self.images))
+        print(len(self.images_right))
+
         #array with pil images
 
         self.select_pressed.set(True)
@@ -359,6 +365,17 @@ class SegmentMRI(Frame):
 
             f3.grid(row=2, column = 2, rowspan=2, sticky=N+S)
 
+
+    def update_saved_image(self):
+        #im = self.images[self.im_index]
+        for i in range(0, len(self.images)):
+            im = self.images[i]
+            self.images[i] = im.resize((int(self.im_size[0] * self.imscale +1), 
+                            int(self.im_size[0] * self.imscale +1)))
+            im_r = self.images_right[i]
+            self.images_right[i] = im_r.resize((int(self.im_size[0] * self.imscale +1), 
+                            int(self.im_size[0] * self.imscale +1)))
+
     def change_image(self, val, side, event): #update image displayed after each change
         if side == 'left':
             im = self.images[self.im_index]
@@ -386,9 +403,6 @@ class SegmentMRI(Frame):
         if event == 'contrast' or 'next':
             c_converter = ImageEnhance.Contrast(im)
             im = c_converter.enhance(b)
-        if event == 'point' or 'next':
-            im = im.convert('RGBA')
-            im = self.draw_contours(self.points, self.im_index, im)
 
         cn.delete('all')
         # +1 to avoid im with size 0 (zoom out too much)
@@ -399,33 +413,49 @@ class SegmentMRI(Frame):
             self.im_right = ImageTk.PhotoImage(im)
             self.im_right_cn = cn.create_image(0, 0, image=self.im_right, anchor=N+W)
 
+        
+        self.draw_contours(im)
 
-    def draw_contours(self, points, index, im):
+    def delete_canvas_elements(self, list):
+        for i in list:
+            self.canvas.delete(i)
+            del i
+        self.canvas.update()
+
+    def draw_contours(self, im):
+        points = self.points
+        index = self.im_index
+
+        self.delete_canvas_elements(self.ovals)
+        self.delete_canvas_elements(self.polygons)
+
+        self.ovals = [] #reset oval locs on zoom
+        self.polygons = []
+
         if points[index] != None:
-            for i in range (0, len(points[index])):
+            for i in range(0, len(points[index])):
                 cont = points[index][i]
                 if cont != None:
-                    cont_scaled = []
-                    #draw contour points
-                    draw = ImageDraw.Draw(im)
+                    #draw points
+                    cont_scaled=[]
+                    
                     for j in range(0, len(cont)):
                         p = cont[j]
                         if p != None:
-                            p = (p[0] * self.imscale, p[1] * self.imscale)
-                            cont_scaled.append(p)
-                            draw.ellipse((p[0], p[1], p[0]+1, p[1]+1), fill='blue', outline='blue')
+                            x = p[0] * self.imscale
+                            y = p[1] * self.imscale
+                            cont_scaled.append(x)
+                            cont_scaled.append(y)
 
-                    #draw connecting lines
-                    if len(cont) > 1:
-                        self.connect_points(cont_scaled, draw)
+                            if i == len(points[index])-1:
+                                o = self.canvas.create_oval(x-1, y-1, x+1, y+1, outline='blue', fill='blue')
+                                self.ovals.append(o)
+                                self.canvas.update()
 
-                    #colour in contour if not line
+                    #draw connecting lines if saved contour
                     if len(cont) > 2 and i != len(points[index])-1:
-                        poly = im.copy()
-                        poly_draw = ImageDraw.Draw(poly)
-                        poly_draw.polygon(cont_scaled, fill='blue')
-
-                        im = Image.blend(im, poly, 0.2)
+                        self.polygons.append(self.canvas.create_polygon(cont_scaled, outline='blue', fill=''))
+                        self.canvas.update()
 
         return im
 

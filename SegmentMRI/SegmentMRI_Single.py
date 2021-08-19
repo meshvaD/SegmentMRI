@@ -99,6 +99,9 @@ class SegmentMRI(Frame):
         save_btn = Button(self.f2, text='Save Contour', command=self.save_contour)
         save_btn.grid(row=2, column=0, pady=5, sticky=W)
 
+        instruction = Label(self.f2, text='Click Ctrl + Z to undo point \n or contour creation \n\n Hold down spacebar and drag \n to pan image \n\n press = on the keyboard or \n the zoom in button and \n select a rectangle area')
+        instruction.grid(row=8, column=0, columnspan=3, pady=20)
+
         #keyboard input binding
         parent.bind_all('<Control-z>', lambda x: self.undo_point())
         parent.bind_all('<KeyPress-space>', lambda x, a = True: self.allow_pan(a))
@@ -293,6 +296,12 @@ class SegmentMRI(Frame):
 
         f1.grid(row=2, column = 1, rowspan=2, sticky=N+S)
 
+    def update_saved_image(self):
+        #im = self.images[self.im_index]
+        for i in range(0, len(self.images)):
+            im = self.images[i]
+            self.images[i] = im.resize((int(self.im_size[0] * self.imscale +1), 
+                            int(self.im_size[0] * self.imscale +1)))
 
     def change_image(self, val, event): #update image displayed after each change
         if len(self.images) > 0:
@@ -302,8 +311,7 @@ class SegmentMRI(Frame):
 
             if event == 'next' : #save zoomed image
                 #factor = self.im_size[0] * self.imscale
-                self.images[self.im_index] = im.resize((int(self.im_size[0] * self.imscale +1), 
-                            int(self.im_size[0] * self.imscale +1)))
+                self.update_saved_image()
             if event == 'brightness' or 'next':
                 a = self.alpha
                 b_converter = ImageEnhance.Brightness(im)
@@ -318,10 +326,9 @@ class SegmentMRI(Frame):
             #                                int(im.size[1] * abs(self.imscale)+1))))
             self.im_left_cn = cn.create_image(0, 0, image=self.im_left, anchor=N+W)
 
-            if event == 'point' or event == 'next':
-                self.draw_contours(im)
-        
+            self.draw_contours(im)
 
+    
     def delete_canvas_elements(self, list):
         for i in list:
             self.canvas.delete(i)
@@ -331,6 +338,9 @@ class SegmentMRI(Frame):
     def draw_contours(self, im):
         points = self.points
         index = self.im_index
+
+        self.delete_canvas_elements(self.ovals)
+        self.delete_canvas_elements(self.polygons)
 
         self.ovals = [] #reset oval locs on zoom
         self.polygons = []
@@ -351,7 +361,7 @@ class SegmentMRI(Frame):
                             cont_scaled.append(y)
 
                             if i == len(points[index])-1:
-                                o = self.canvas.create_oval(x-1, y-1, x+1, y+1, outline='red', fill='blue')
+                                o = self.canvas.create_oval(x-1, y-1, x+1, y+1, outline='blue', fill='blue')
                                 self.ovals.append(o)
                                 self.canvas.update()
 
@@ -419,8 +429,7 @@ class SegmentMRI(Frame):
 
             if len(self.images) > 0:
                 im = self.images[self.im_index]
-                self.images[self.im_index] = im.resize((int(im.size[0] * factor +1), 
-                                        int(im.size[1] * factor +1)))
+                self.update_saved_image()
 
             self.canvas.xview_moveto(0)
             self.canvas.yview_moveto(0)
@@ -439,10 +448,9 @@ class SegmentMRI(Frame):
         self.imscale = abs(self.imscale + scale)
 
         im = self.images[self.im_index]
-        self.images[self.im_index] = im.resize((int(im.size[0] * factor +1), 
-                                        int(im.size[1] * factor +1)))
+        self.update_saved_image()
 
-        self.canvas.scale('all', 0, 0, scale, scale)
+        self.canvas.scale('all', self.canvas.canvasx(0), self.canvas.canvasy(0), scale, scale)
 
         self.change_image(self.im_index+1, 'zoom')
         self.draw_contours(self.images[self.im_index])
@@ -524,8 +532,7 @@ class SegmentMRI(Frame):
                 self.imscale *= self.canvas.winfo_height() / abs(rec[0][1] - rec[2][1])
 
             factor = abs(self.imscale) / orig
-            self.images[self.im_index] = im.resize((int(im.size[0] * factor +1), 
-                                        int(im.size[1] * factor +1)))
+            self.update_saved_image()
 
             self.change_image(self.im_index+1, 'zoom')
 
@@ -639,21 +646,50 @@ class SegmentMRI(Frame):
                 if title == '':
                     title = '1'
                 self.to_tiff(self.images, directory + '/' + (fpath + '_' + title) + '.tiff')
-            
+     
+    def image_with_contours(self, points, index, im):
+        if points[index] != None:
+            for i in range (0, len(points[index])):
+                cont = points[index][i]
+                if cont != None:
+                    cont_scaled = []
+                    #draw contour points
+                    draw = ImageDraw.Draw(im)
+                    for j in range(0, len(cont)):
+                        p = cont[j]
+                        if p != None:
+                            p = (p[0] * self.imscale, p[1] * self.imscale)
+                            cont_scaled.append(p)
+                            draw.ellipse((p[0], p[1], p[0]+1, p[1]+1), fill='blue', outline='blue')
+
+                    #draw connecting lines
+                    if len(cont) > 1:
+                        self.connect_points(cont_scaled, draw)
+
+                    #colour in contour if not line
+                    if len(cont) > 2 and i != len(points[index])-1:
+                        poly = im.copy()
+                        poly_draw = ImageDraw.Draw(poly)
+                        poly_draw.polygon(cont_scaled, fill='blue')
+
+                        im = Image.blend(im, poly, 0.2)
+
+        return im
+
     def to_tiff(self, ims, fpath):
         fpath = fpath.replace('*', '')
         with tiff.TiffWriter(fpath) as stack:
             for i in range(0, len(ims)):
                 #draw contours on images
-                im = self.draw_contours(self.points, i, ims[i].convert('RGBA'))
+                im = self.image_with_contours(self.points, i, ims[i].convert('RGBA'))
                 stack.write(np.array(im))
 
 
     #other functions
 
     def true_coordinates(self, x, y):
-        true_x = int((x + self.canvas.canvasx(0)) / self.imscale)
-        true_y = int((y + self.canvas.canvasy(0)) / self.imscale)
+        true_x = (x + self.canvas.canvasx(0)) / self.imscale
+        true_y = (y + self.canvas.canvasy(0)) / self.imscale
 
         return (true_x, true_y)
 
