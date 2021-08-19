@@ -586,6 +586,7 @@ class SegmentMRI(Frame):
 
     def undo_point(self):
         curr = len(self.points[self.im_index]) - 1
+
         if self.points[self.im_index] == None or self.points[self.im_index][curr] == None:
             self.error.set('no points selected to undo')
         elif self.points[self.im_index][curr][-1] == None and len(self.data) > 0:
