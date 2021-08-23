@@ -593,13 +593,13 @@ class SegmentMRI(Frame):
 
         if self.points[self.im_index] == None or self.points[self.im_index][curr] == None:
             self.error.set('no points selected to undo')
-        elif self.points[self.im_index][curr][-1] == None and len(self.data) > 0:
+        elif self.points[self.im_index][curr] == [None] and len(self.points[self.im_index]) > 1:
             del self.points[self.im_index][curr]
             del self.data[-1]
 
             self.change_image(self.im_index+1, 'point')
         elif len(self.points[self.im_index][curr]) == 1:
-            self.points[self.im_index][curr][-1] = None
+            self.points[self.im_index][curr] = [None]
         elif len(self.points[self.im_index][curr]) > 1:
             del self.points[self.im_index][curr][-1]
 

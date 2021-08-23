@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>a8ff7c9a-9d39-4f58-a31b-1f310a46ba94</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>SegmentMRI_Single.py</StartupFile>
+    <StartupFile>SegmentMRI_Complete.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
