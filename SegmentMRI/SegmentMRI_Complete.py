@@ -23,6 +23,8 @@ print(' os \n io')
 
 class SegmentMRI(Frame):
 
+    #resets all variables incl zoom/brightness/images/selections
+    #creates all intiial components(one canvas, left panel, top left panel)
     def __init__(self, parent):
 
         #global variables
@@ -75,7 +77,6 @@ class SegmentMRI(Frame):
 
         ftop1.grid(row=0, column=1, sticky=W)
         
-
         self.canvas.bind('<MouseWheel>', self.next_image)
         self.canvas.bind('<ButtonPress-1>', self.move_from)
         self.canvas.bind('<B1-Motion>', self.move_to)
@@ -85,7 +86,6 @@ class SegmentMRI(Frame):
 
         reset_btn = Button(parent, text='Reset', command=self.reset)
         reset_btn.grid(row=5, column=1, sticky=W, pady=5)
-
 
         #left panel frame
         self.f2 = Frame(parent)
@@ -121,32 +121,13 @@ class SegmentMRI(Frame):
         if getattr(sys, 'frozen', False):
             basepath = sys._MEIPASS + '\\'
 
-        #zoom and pan controls
-        #self.hand = ImageTk.PhotoImage(Image.open(basepath + 'hand.png').resize((20,20))) #shrink
-        #pan_btn = Button(self.f2, image = self.hand, width=20, height=20, command=self.allow_pan)
-        #pan_btn.grid(row=5, column=2, pady=5, sticky=W)
-
-        self.zoom_invar = StringVar(self.f2, value='1.0')
-        self.zoom_input = Entry(self.f2, textvariable=self.zoom_invar, validate='focusout', 
-                                validatecommand= self.set_zoom)
-                                #validatecommand=lambda zoom=float(self.zoom_invar.get()):self.zoomer(zoom))
-        self.zoom_input.grid(row=4, column=1, sticky=E)
-
         self.zoom_in = ImageTk.PhotoImage(Image.open(basepath + 'zoom_in.png').resize((20,20)))
         zoomin_btn = Button(self.f2, image = self.zoom_in, width=20, height=20, command=self.allow_zoom)
         zoomin_btn.grid(row=4, column=3, pady=5, sticky=W)
 
         self.zoom_out = ImageTk.PhotoImage(Image.open(basepath + 'zoom_out.png').resize((20,20)))
-        zoomout_btn = Button(self.f2, image = self.zoom_out, width=20, height=20, command=lambda zoom=-0.3:self.zoomer(zoom))
+        zoomout_btn = Button(self.f2, image = self.zoom_out, width=20, height=20, command=lambda zoom=-0.5:self.zoomer(zoom))
         zoomout_btn.grid(row=4, column=2, pady=5, sticky=E)
-
-        #upscale image input
-        #upscale_lb = Label(self.f2, text='Upscale factor: ')
-        #upscale_lb.grid(row=5, column=0)
-        #self.upscale_invar = StringVar(self.f2, value='1')
-        #upscale_input = Entry(self.f2, textvariable=self.upscale_invar, validate='focusout',
-        #                      validatecommand= self.set_upsample)
-        #upscale_input.grid(row=5, column=1, sticky=E)
 
         #image number
         self.im_show = StringVar(self.f2)
@@ -160,7 +141,8 @@ class SegmentMRI(Frame):
         error_label = Label(self.f2, textvariable=self.error)
         error_label.grid(row=6, column=0, columnspan=2)
 
-
+    #if a folder is selected, display all files within it - if all the files are dcms, give an option to display
+    #at least one folder must be zipped in order to navigate
     def explore(self, file, side, win=None, zip=None):
         if win:
             win.destroy()
@@ -221,7 +203,7 @@ class SegmentMRI(Frame):
                                     command=lambda win=win, zip=zip, name=file, side=side: self.select(name, side, win, zip))
                 select_btn.grid(row=win.grid_size()[1], column=0)
 
-
+    #once a folder with dcms is selected, read and store those
     def select(self, file, side, win, zip): 
         filelist = zip.namelist()
 
@@ -234,7 +216,7 @@ class SegmentMRI(Frame):
 
             ds = dicom.dcmread(dcm).pixel_array
 
-            #equalize array
+            #equalize, sets contrast/brightness initially
             ds = exposure.equalize_adapthist(ds) * 255
 
             pil_im = Image.fromarray(ds).convert('L')
@@ -269,9 +251,8 @@ class SegmentMRI(Frame):
         win.destroy()
         del ds, pil_im
 
-
-    #event handler functions
-    def select_image(self, name): #after image selected, initial work done
+    #when user chooses to select a file : create a canvas with image and controls
+    def select_image(self, name):
 
         #open file choose
         zip_file = filedialog.askopenfilename()
@@ -330,6 +311,11 @@ class SegmentMRI(Frame):
             self.canvas_right = Canvas(self.parent, width=400, height=400, bg='white')
             self.canvas_right.grid(row=1, column=2, sticky = N+S+E+W, pady=5)
 
+            #on create sync position with left canvas
+            self.canvas_right.scan_mark(int(self.canvas.canvasx(0)), 
+                                  int(self.canvas.canvasy(0)))
+            self.canvas_right.scan_dragto(0, 0, gain=1)
+
             self.canvas_right.bind('<MouseWheel>', self.next_image)
             self.canvas_right.bind('<ButtonPress-1>', self.move_from)
             self.canvas_right.bind('<B1-Motion>', self.move_to)
@@ -371,7 +357,8 @@ class SegmentMRI(Frame):
 
             f3.grid(row=2, column = 2, rowspan=2, sticky=N+S)
 
-
+    #saves a resized version of the image : saves time from resizing it everytime it is redrawn
+    #can keep scaling up iamge by resizing and zooming in
     def update_saved_image(self):
         #im = self.images[self.im_index]
         for i in range(0, len(self.images)):
@@ -384,8 +371,8 @@ class SegmentMRI(Frame):
             self.images_right[j] = im_r.resize((int(self.im_size[0] * self.imscale +1), 
                             int(self.im_size[1] * self.imscale +1)))
 
-
-    def change_image(self, val, side, event): #update image displayed after each change
+    #redraws the image and all the selections, done when the image needs to be redrawn
+    def change_image(self, val, side, event):
         if event == 'next': #save zoomed images
             self.update_saved_image()
         
@@ -422,12 +409,14 @@ class SegmentMRI(Frame):
         
         self.draw_contours(im)
 
+    #delets all canvas elements in a given list
     def delete_canvas_elements(self, list):
         for i in list:
             self.canvas.delete(i)
             del i
         self.canvas.update()
 
+    #deletes all canvas addons (selected points/lines)
     def deleteall_canvas(self, canvas):
         l = canvas.find_all()
         for id in l:
@@ -437,6 +426,7 @@ class SegmentMRI(Frame):
                 canvas.delete(id)
         self.canvas.update()
 
+    #duplicates all objects from one object to another - used for syncing left/right canvases
     def duplicate_objects(self, canvas_a, canvas_b, color):
         l = canvas_a.find_all()
 
@@ -449,6 +439,7 @@ class SegmentMRI(Frame):
             elif len(coord_list) > 4:
                 canvas_b.create_polygon(coord_list, outline=color, fill='')
 
+    #draws all the points and shapes selected on both canvases
     def draw_contours(self, im):
         points = self.points
         index = self.im_index
@@ -490,13 +481,14 @@ class SegmentMRI(Frame):
 
         return im
 
+    #draws lines that connect each point in points
     def connect_points(self, points, im):
         prev = points[0]
         for curr in points:
             im.line([prev, curr], fill='blue', width=1)
             prev = curr
 
-    #brightness and contrast update var
+    #next 4 update brightness/contrast variables and call to redraw image
     def change_brightness(self, val):
         self.alpha = float(val)
 
@@ -517,6 +509,7 @@ class SegmentMRI(Frame):
     
         self.change_image(self.im_index+1, 'right', 'contrast')
   
+    #on scroll, change displayed image and redraw
     def next_image(self, event):
         l = len(self.images)
 
@@ -529,65 +522,35 @@ class SegmentMRI(Frame):
 
         self.update_all('next')
 
-    #resize and upsample image
-    #def set_upsample(self):
-    #    print('upsample')
-    #    self.upsample = int(self.upscale_invar.get())
-    #    for i in range (0, len(self.images)):
-
-    #        self.imscale = 1.0 / self.upsample
-    #        pil_im = self.images[i].resize((int(self.images[i].size[0] * self.upsample), 
-    #                                int(self.images[i].size[1] * self.upsample)))
-    #        self.images[i] = pil_im
-    #    for i in range (0, len(self.images_right)):
-    #        self.imscale = 1.0 / self.upsample
-    #        pil_im = self.images_right[i].resize((int(self.images_right[i].size[0] * self.upsample), 
-    #                                int(self.images_right[i].size[1] * self.upsample)))
-    #        self.images_right[i] = pil_im
-    #    self.update_all()
-
-    #    return True
-
-    #zoom and pan
-    def set_zoom(self):
-        factor = float(self.zoom_invar.get()) / self.imscale
-        if factor > 0:
-            #self.canvas.scale('all', 0, 0, abs(scale-self.imscale), abs(scale-self.imscale))
-            self.imscale = float(self.zoom_invar.get())
-
-            if len(self.images) > 0:
-                im = self.images[self.im_index]
-                self.update_saved_image()
-            if len(self.images_right) > 0:
-                im = self.images_right[self.im_index]
-                self.update_saved_image()
-
-            self.canvas.xview_moveto(0)
-            self.canvas.yview_moveto(0)
-
-            self.update_all('point')
-        return True
-
+    #if certain keys pressed, allow zoom and register clicks as zoom selection
     def allow_zoom(self):
         self.zoom = True
 
+    #zoom out linearly by pressing - magnification button
     def zoomer(self, scale): 
-        print(self.imscale)
+        scale *= self.imscale
         factor = abs(self.imscale + scale) / self.imscale
 
-        self.imscale = abs(self.imscale + scale)
+        imscale = abs(self.imscale+scale)
+        if imscale >= 1.0:
+            self.imscale = abs(self.imscale + scale)
 
         if len(self.images) > 0:
             im = self.images[self.im_index]
         if len(self.images_right) > 0:
             im = self.images_right[self.im_index]
 
-        self.canvas.scale('all', 0, 0, scale, scale)
-        self.canvas_right.scale('all', 0, 0, scale, scale)
+        self.canvas.scale('all', self.canvas.canvasx(self.canvas.winfo_width()/2), 
+                          self.canvas.canvasy(self.canvas.winfo_height()/2), scale, scale)
+        #self.canvas.scale('all', 0, 0, scale, scale)
+
+        if hasattr(self, 'canvas_right'):
+            self.canvas_right.scale('all', 0, 0, scale, scale)
 
         self.update_saved_image()
         self.update_all('')
 
+    #draws a rectangle as user moves their mouse after selecting first point
     def zoom_rec(self, event, coords):
         
         coords2 = self.true_coordinates(event.x, event.y)
@@ -617,6 +580,7 @@ class SegmentMRI(Frame):
             self.im_r = ImageTk.PhotoImage(im)
             rec_im_right = self.canvas_right.create_image(0, 0, image=self.im_r, anchor=N+W)
  
+    #is space bar pressed, allows pan when dragging canvas and changes cursor
     def allow_pan(self, a):
         if a:
             self.pan = True
@@ -625,26 +589,33 @@ class SegmentMRI(Frame):
             self.pan = False
             self.parent.config(cursor='tcross')
 
+    #when dragging canvas, save initial coordinates
     def move_from(self, event):
         if self.pan:
             x = event.x
             y = event.y
 
             self.canvas.scan_mark(x, y)
-            self.canvas_right.scan_mark(x, y)
+
+            if hasattr(self, 'canvas_right'):
+                self.canvas_right.scan_mark(x, y)
         else:
             self.add_point(event)
 
+    #get new coordinates that user dragged to and move canvas
     def move_to(self, event):
         if self.pan:
             x = event.x
             y = event.y
 
             self.canvas.scan_dragto(x, y, gain=1)
-            self.canvas_right.scan_dragto(x, y, gain=1)
 
-    #point/ contour selection
+            if hasattr(self, 'canvas_right'):
+                self.canvas_right.scan_dragto(x, y, gain=1)
+
+    #add point or zoom in with a rectangle when canvas clicked
     def add_point(self, event):
+        #if zoom enabled and first point not placed, save initial coords
         if self.zoom and not hasattr(self, 'im_l'):
             self.parent.config(cursor='hand1')
             coords = self.true_coordinates(event.x, event.y)
@@ -653,7 +624,8 @@ class SegmentMRI(Frame):
 
             self.zoom_coords = event
 
-        elif self.zoom: #has first point placed 
+        #if zoom enabled and first point placed, save rectangle and calculate zoom/pan required
+        elif self.zoom:
             self.parent.config(cursor='tcross')
             rec = [(self.zoom_coords.x, self.zoom_coords.y),
                    (self.zoom_coords.x, event.y),
@@ -704,10 +676,11 @@ class SegmentMRI(Frame):
             self.canvas.scan_dragto(0, 0, gain=1)
             self.canvas.update()
 
-            self.canvas_right.scan_mark(int(x - self.canvas_right.canvasx(0)), 
-                                  int(y - self.canvas_right.canvasy(0)))
-            self.canvas_right.scan_dragto(0, 0, gain=1)
-            self.canvas_right.update()
+            if hasattr(self, 'canvas_right'):
+                self.canvas_right.scan_mark(int(x - self.canvas_right.canvasx(0)), 
+                                      int(y - self.canvas_right.canvasy(0)))
+                self.canvas_right.scan_dragto(0, 0, gain=1)
+                self.canvas_right.update()
 
             #reset 
             self.canvas.unbind('<Motion>')
@@ -720,6 +693,7 @@ class SegmentMRI(Frame):
 
             self.update_all('zoom')
 
+        #otehrwise, user selects a point to add, updated poits list and draw circle on canvas
         elif len(self.images) > 0 or len(self.images_right) > 0:
             coords = self.true_coordinates(event.x, event.y)
             curr = len(self.points[self.im_index]) - 1
@@ -735,8 +709,6 @@ class SegmentMRI(Frame):
                 list.append(coords)
                 self.points[self.im_index][curr] = list
 
-
-            #still a delay w undo ... showcase all points + connections like this?
             x = self.canvas.canvasx(event.x)
             y = self.canvas.canvasy(event.y)
 
@@ -744,9 +716,11 @@ class SegmentMRI(Frame):
             self.ovals.append(o)
             self.canvas.update()
 
-            self.canvas_right.create_oval(x-1, y-1, x+1, y+1, fill='blue', outline='blue')
-            self.canvas_right.update()
+            if hasattr(self, 'canvas_right'):
+                self.canvas_right.create_oval(x-1, y-1, x+1, y+1, fill='blue', outline='blue')
+                self.canvas_right.update()
         
+    #undo point and redraw all canvas circles/shapes (quicker than redrawing image)
     def undo_point(self):
         curr = len(self.points[self.im_index]) - 1
 
@@ -767,10 +741,11 @@ class SegmentMRI(Frame):
             del self.ovals[-1]
             self.canvas.update()
 
-        self.deleteall_canvas(self.canvas_right)
-        self.duplicate_objects(self.canvas, self.canvas_right, 'blue')
+        if hasattr(self, 'scale_right'):
+            self.deleteall_canvas(self.canvas_right)
+            self.duplicate_objects(self.canvas, self.canvas_right, 'blue')
 
-
+    #calculate area and append info to table
     def save_contour(self):
         #add with target to df array: slice + target + coords
         if self.target_input.get() == '':
@@ -790,9 +765,11 @@ class SegmentMRI(Frame):
 
             self.draw_contours(self.images[self.im_index])
 
+    #reset entire canvas by reinitializing
     def reset(self):
         self.__init__(self.parent)
 
+    #draw all the saved contours on the image
     def image_with_contours(self, points, index, im):
         if points[index] != None:
             for i in range (0, len(points[index])):
@@ -822,6 +799,7 @@ class SegmentMRI(Frame):
 
         return im
 
+    #exports datatable to user-chosen location
     def export(self):
         print('export')
 
@@ -848,6 +826,7 @@ class SegmentMRI(Frame):
                     title = '2'
                 self.to_tiff(self.images_right, directory + '/' + (fpath + '_' + title) + '.tiff')
 
+    #converts all images with drawn contours to a tiff stack
     def to_tiff(self, ims, fpath):
         fpath = fpath.replace('*', '')
         with tiff.TiffWriter(fpath) as stack:
@@ -856,41 +835,14 @@ class SegmentMRI(Frame):
                 im = self.image_with_contours(self.points, i, ims[i].convert('RGBA'))
                 stack.write(np.array(im))
 
-
-    #other functions
-
+    #finds image coords given canvas coords, decimal pixels relative to original size
     def true_coordinates(self, x, y):
-        true_x = int((x + self.canvas.canvasx(0)) / self.imscale)
-        true_y = int((y + self.canvas.canvasy(0)) / self.imscale)
+        true_x = (x + self.canvas.canvasx(0)) / self.imscale
+        true_y = (y + self.canvas.canvasy(0)) / self.imscale
 
         return (true_x, true_y)
 
-    def isoverlap(a, b):
-        a = undo_tuplearr(a)
-        b = undo_tuplearr(b)
-
-        path_a = mpl.path.Path(a)
-        path_b = mpl.path.Path(b)
-
-        out_1 = mpl.path.Path.contains_points(path_a, b, radius=5.0)
-        out_2 = mpl.path.Path.contains_points(path_b, a, radius=5.0)
-
-        true_count_1 = out_1.sum()
-        true_count_2 = out_2.sum()
-
-        out = true_count_1 / len(out_1)
-        if true_count_1 < true_count_2:
-            out = true_count_2 / len(out_2)
-
-        return out > 0.75
-
-    def undo_tuplearr(a):
-        b = np.ndarray((len(a), 2), dtype='uint16')
-        for i in range(0, len(a)):
-            b[i][0] = a[i][0]
-            b[i][1] = a[i][1]
-        return b
-
+    #find area given point list
     def area(self, cont):
         area = 0.0
         n = len(cont)
@@ -902,24 +854,15 @@ class SegmentMRI(Frame):
 
         return area
 
-    def vol_from_areas(conts, thickness):
-        vol = 0.0
-        for corners in conts:
-            area = area(corners)
-            vol += thickness * area
-
-        return vol
-
+    #updates left and right canvas depedning if they exist
     def update_all(self, event):
         if len(self.images) > 0:
             self.change_image(self.im_index+1, 'left', event)
         if len(self.images_right) > 0:
             self.change_image(self.im_index+1, 'right', event)
+ 
 
-
-        
 #start
-
 root = Tk()
 SegmentMRI(root)
 root.mainloop()
